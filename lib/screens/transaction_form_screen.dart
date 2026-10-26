@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../models/transaction_model.dart';
 import '../repositories/transaction_repository.dart';
+import '../utils/amount_parser.dart';
 import '../utils/formatters.dart';
 
 class TransactionFormScreen extends StatefulWidget {
@@ -66,18 +67,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     super.dispose();
   }
 
-  int? _parseAmountPaise(String value) {
-    final parts = value.trim().split('.');
-    if (parts.isEmpty || parts.length > 2 || parts.first.isEmpty) return null;
-    final whole = int.tryParse(parts.first);
-    final fraction = parts.length == 1
-        ? 0
-        : int.tryParse(parts[1].padRight(2, '0'));
-    if (whole == null || fraction == null || fraction > 99) return null;
-    if (whole > (0x7fffffffffffffff - fraction) ~/ 100) return null;
-    final amount = whole * 100 + fraction;
-    return amount > 0 ? amount : null;
-  }
+  int? _parseAmountPaise(String value) => parseAmountPaise(value);
 
   Future<void> _selectDate() async {
     final selected = await showDatePicker(
