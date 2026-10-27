@@ -8,14 +8,16 @@ import '../widgets/transaction_tile.dart';
 import 'transaction_form_screen.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, this.repository});
+
+  final TransactionRepository? repository;
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  final _repository = TransactionRepository();
+  late final TransactionRepository _repository;
   late Future<(TransactionSummary, List<TransactionModel>)> _data;
   int _selectedIndex = 0;
   int _refreshVersion = 0;
@@ -31,6 +33,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    _repository = widget.repository ?? TransactionRepository();
     _data = _loadData();
   }
 
@@ -80,7 +83,16 @@ class _AppShellState extends State<AppShell> {
     );
     if (confirm != true || !mounted) return;
     try {
-      await _repository.delete(transaction.id!);
+      final deletedRows = await _repository.delete(transaction.id!);
+      if (deletedRows == 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This transaction was already removed.'),
+            ),
+          );
+        }
+      }
       _reload();
     } catch (error) {
       if (mounted) {
@@ -418,8 +430,8 @@ class _HistoryScreenState extends State<_HistoryScreen> {
       initialDate: _dateFilter == null
           ? DateTime.now()
           : dateFromIso(_dateFilter!),
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100),
+      firstDate: minimumTransactionDate,
+      lastDate: maximumTransactionDate,
       helpText: 'FILTER BY DATE',
     );
     if (selected != null) {
@@ -565,8 +577,8 @@ class _CalendarScreenState extends State<_CalendarScreen> {
           ),
           child: CalendarDatePicker(
             initialDate: _selectedDate,
-            firstDate: DateTime(1900),
-            lastDate: DateTime(2100),
+            firstDate: minimumTransactionDate,
+            lastDate: maximumTransactionDate,
             onDateChanged: (date) => setState(() => _selectedDate = date),
           ),
         ),

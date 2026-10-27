@@ -73,14 +73,15 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     final selected = await showDatePicker(
       context: context,
       initialDate: _date,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100),
+      firstDate: minimumTransactionDate,
+      lastDate: maximumTransactionDate,
       helpText: 'SELECT TRANSACTION DATE',
     );
     if (selected != null) setState(() => _date = selected);
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
     final amountPaise = _parseAmountPaise(_amountController.text);
     if (amountPaise == null) return;
@@ -101,7 +102,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       if (original == null) {
         await widget.repository.insert(transaction);
       } else {
-        await widget.repository.update(transaction);
+        final updatedRows = await widget.repository.update(transaction);
+        if (updatedRows != 1) {
+          throw StateError('This transaction no longer exists.');
+        }
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {

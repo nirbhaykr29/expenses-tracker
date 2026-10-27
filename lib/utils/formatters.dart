@@ -1,5 +1,8 @@
 import 'package:intl/intl.dart';
 
+final minimumTransactionDate = DateTime(1900, 1, 1);
+final maximumTransactionDate = DateTime(2100, 12, 31);
+
 final _rupeeFormatter = NumberFormat.currency(
   locale: 'en_IN',
   symbol: '₹',
@@ -18,12 +21,28 @@ String formatRupees(int amountPaise, {bool includePaise = true}) {
 }
 
 DateTime dateFromIso(String date) {
-  final parts = date.split('-');
-  return DateTime(
-    int.parse(parts[0]),
-    int.parse(parts[1]),
-    int.parse(parts[2]),
-  );
+  if (date.length != 10 ||
+      !RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$').hasMatch(date)) {
+    throw FormatException('Expected a valid YYYY-MM-DD date.', date);
+  }
+
+  final year = int.parse(date.substring(0, 4));
+  final month = int.parse(date.substring(5, 7));
+  final day = int.parse(date.substring(8, 10));
+  if (year < minimumTransactionDate.year ||
+      year > maximumTransactionDate.year) {
+    throw FormatException('Date is outside the supported range.', date);
+  }
+
+  final parsed = DateTime(year, month, day);
+  if (parsed.year != year || parsed.month != month || parsed.day != day) {
+    throw FormatException('Date is not a valid calendar day.', date);
+  }
+  if (parsed.isBefore(minimumTransactionDate) ||
+      parsed.isAfter(maximumTransactionDate)) {
+    throw FormatException('Date is outside the supported range.', date);
+  }
+  return parsed;
 }
 
 String isoDate(DateTime date) =>

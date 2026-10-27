@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../database/database_helper.dart';
 import '../models/transaction_model.dart';
+import '../utils/formatters.dart';
 
 class TransactionSummary {
   const TransactionSummary({
@@ -58,6 +59,7 @@ class TransactionRepository {
     String? date,
     int? limit,
   }) async {
+    if (date != null) dateFromIso(date);
     final db = await _databaseHelper.database;
     final conditions = <String>[];
     final arguments = <Object>[];
@@ -76,28 +78,53 @@ class TransactionRepository {
       orderBy: 'date DESC, created_at DESC, id DESC',
       limit: limit,
     );
-    return rows.map(TransactionModel.fromMap).toList(growable: false);
+    return rows
+        .map((row) {
+          final transaction = TransactionModel.fromMap(row);
+          dateFromIso(transaction.date);
+          if (transaction.amountPaise <= 0 ||
+              transaction.category.trim().isEmpty ||
+              transaction.createdAt.trim().isEmpty) {
+            throw const FormatException('Stored transaction data is invalid.');
+          }
+          return transaction;
+        })
+        .toList(growable: false);
   }
 
   Future<TransactionSummary> getSummary() async {
     final db = await _databaseHelper.database;
-    final rows = await db.rawQuery(
-      '''
-      SELECT
-        COALESCE(SUM(CASE WHEN type = ? THEN amount_paise ELSE 0 END), 0)
-          AS total_credit_paise,
-        COALESCE(SUM(CASE WHEN type = ? THEN amount_paise ELSE 0 END), 0)
-          AS total_debit_paise,
-        COUNT(*) AS transaction_count
-      FROM transactions
-    ''',
-      [TransactionType.credit.value, TransactionType.debit.value],
+    final rows = await db.query(
+      'transactions',
+      columns: ['type', 'amount_paise'],
     );
-    final row = rows.single;
+    var totalCreditPaise = 0;
+    var totalDebitPaise = 0;
+    const maxPaise = 0x7fffffffffffffff;
+    for (final row in rows) {
+      final amountPaise = row['amount_paise'];
+      if (amountPaise is! int || amountPaise <= 0) {
+        throw const FormatException('Stored transaction amount is invalid.');
+      }
+      switch (row['type']) {
+        case 'credit':
+          if (totalCreditPaise > maxPaise - amountPaise) {
+            throw StateError('Total income exceeds the supported amount.');
+          }
+          totalCreditPaise += amountPaise;
+        case 'debit':
+          if (totalDebitPaise > maxPaise - amountPaise) {
+            throw StateError('Total expenses exceed the supported amount.');
+          }
+          totalDebitPaise += amountPaise;
+        default:
+          throw const FormatException('Stored transaction type is invalid.');
+      }
+    }
     return TransactionSummary(
-      totalCreditPaise: row['total_credit_paise'] as int,
-      totalDebitPaise: row['total_debit_paise'] as int,
-      transactionCount: row['transaction_count'] as int,
+      totalCreditPaise: totalCreditPaise,
+      totalDebitPaise: totalDebitPaise,
+      transactionCount: rows.length,
     );
   }
 
@@ -109,8 +136,10 @@ class TransactionRepository {
         'Amount must be greater than zero.',
       );
     }
-    if (transaction.category.trim().isEmpty || transaction.date.isEmpty) {
-      throw ArgumentError('Category and date are required.');
+    if (transaction.category.trim().isEmpty ||
+        transaction.createdAt.trim().isEmpty) {
+      throw ArgumentError('Category and creation time are required.');
     }
+    dateFromIso(transaction.date);
   }
 }
